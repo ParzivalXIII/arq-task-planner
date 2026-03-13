@@ -1,14 +1,62 @@
-# Python-generated files
+# Python bytecode and cache
 __pycache__/
-*.py[oc]
-build/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
 dist/
+build/
 wheels/
-*.egg-info
+.eggs/
 
 # Virtual environments
-.venv
+.venv/
+venv/
+ENV/
+env/
 
+# Jupyter/IPython
+.ipynb_checkpoints/
 
-# Other
+# Test, coverage, and profiling
+.coverage
+.coverage.*
+.cache/
+htmlcov/
+*.cover
+*.py,cover
+*.log
+coverage.xml
+nosetests.xml
+test-results/
+
+# MyPy, Pyright, Ruff, and other tooling
+.mypy_cache/
+.pytest_cache/
+.pyre/
+.ruff_cache/
+.pytype/
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*.bak
+*.orig
+*~
+
+# Docker
+*.pid
+docker-compose.override.yml
+
+# Project-specific
 PRD.md
+docs/PRD.md
+docs/WORKER.md
+docs/worker-implementation.md
+htmlcov/
+start_worker.sh
+init_db.py

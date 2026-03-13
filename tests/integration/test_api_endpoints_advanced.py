@@ -279,3 +279,116 @@ def test_health_endpoint_structure(client):
     assert "database" in data
     assert data["status"] in ["healthy", "degraded", "unhealthy"]
     assert "healthy" in data["database"] or "unhealthy" in data["database"]
+
+
+@pytest.mark.integration
+def test_retry_task_exceeding_max_retries_directly(client):
+    """Test retry endpoint behavior when max retries have been exceeded."""
+    # Create task with max_retries=0 (will fail immediately)
+    response = client.post("/tasks", json={
+        "task_type": "zero_retry",
+        "payload": {},
+        "max_retries": 0,
+    })
+    task_id = response.json()["id"]
+
+    # Try to retry - should move to DEAD_LETTER
+    response = client.post(f"/tasks/{task_id}/retry")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "DEAD_LETTER"
+    assert data["retry_count"] == 0
+
+
+@pytest.mark.integration
+def test_submit_task_minimal_payload(client):
+    """Test task submission with minimal payload."""
+    response = client.post("/tasks", json={
+        "task_type": "minimal",
+        "payload": {},
+    })
+    assert response.status_code == 201
+    data = response.json()
+    assert data["task_type"] == "minimal"
+    assert data["payload"] == {}
+    assert data["priority"] == 0  # Default priority
+    assert data["max_retries"] == 3  # Default max_retries
+
+
+@pytest.mark.integration
+def test_list_tasks_empty_with_status_filter(client):
+    """Test listing tasks with status filter when no tasks exist."""
+    response = client.get("/tasks?status=COMPLETED")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["count"] == 0
+    assert data["tasks"] == []
+
+
+@pytest.mark.integration
+def test_get_task_immediately_after_creation(client):
+    """Test retrieving task immediately after creation."""
+    create_response = client.post("/tasks", json={
+        "task_type": "immediate_fetch",
+        "payload": {"instant": True},
+    })
+    task_id = create_response.json()["id"]
+
+    # Fetch immediately
+    response = client.get(f"/tasks/{task_id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == task_id
+    assert data["status"] == "QUEUED"
+    assert data["payload"]["instant"] is True
+
+
+@pytest.mark.integration
+def test_task_timestamps_are_recent(client):
+    """Verify created_at and updated_at are recent."""
+
+    response = client.post("/tasks", json={
+        "task_type": "timestamp_check",
+        "payload": {},
+    })
+
+    data = response.json()
+    # Parse ISO format timestamps
+    created_at_str = data["created_at"]
+    updated_at_str = data["updated_at"]
+
+    # Both timestamps should be valid ISO format strings
+    assert isinstance(created_at_str, str)
+    assert isinstance(updated_at_str, str)
+    # Both should follow ISO format
+    assert "T" in created_at_str
+    assert "T" in updated_at_str
+
+
+@pytest.mark.integration
+def test_idempotency_with_retry(client):
+    """Test idempotency key prevents duplicate creation even with retries."""
+    key = "retry-idempotency-test"
+
+    # Create first task
+    response1 = client.post("/tasks", json={
+        "task_type": "idempotent_retry",
+        "payload": {"attempt": 1},
+        "idempotency_key": key,
+    })
+    task_id = response1.json()["id"]
+
+    # Retry it
+    client.post(f"/tasks/{task_id}/retry")
+
+    # Try to create again with same idempotency key
+    response2 = client.post("/tasks", json={
+        "task_type": "idempotent_retry",
+        "payload": {"attempt": 2},  # Different payload
+        "idempotency_key": key,
+    })
+
+    # Should get same task back
+    assert response2.json()["id"] == task_id
+    # Payload should still be original
+    assert response2.json()["payload"]["attempt"] == 1

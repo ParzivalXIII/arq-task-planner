@@ -107,19 +107,30 @@ async def execute_task_handler(ctx, task_id: str) -> dict:
         logger.exception(f"❌ Task {task_id_str} failed: {str(e)}")
 
         # Fetch task to check retry count
+        retry_count = 0
+        max_retries = 0
+        should_retry = False
+
         async with AsyncSession(engine) as session:
             task_db = await session.get(Task, task.id)      # type: ignore
             if not task_db:
                 return {"status": "failed", "reason": "task_disappeared_on_error"}
 
+            # Read values while session is active
+            retry_count = task_db.retry_count
+            max_retries = task_db.max_retries
+
             # Mark as FAILED or RETRYING based on retry count
-            if task_db.retry_count >= task_db.max_retries:
+            if retry_count >= max_retries:
                 task_db.status = TaskStatus.DEAD_LETTER
                 logger.warning(f"⚠️  Task {task_id_str} moved to DEAD_LETTER (max retries exceeded)")
+                should_retry = False
             else:
                 task_db.status = TaskStatus.RETRYING
                 task_db.retry_count += 1
-                logger.info(f"🔄 Task {task_id_str} marked for retry ({task_db.retry_count}/{task_db.max_retries})")
+                retry_count = task_db.retry_count
+                logger.info(f"🔄 Task {task_id_str} marked for retry ({retry_count}/{max_retries})")
+                should_retry = True
 
             task_db.last_error = str(e)
             task_db.updated_at = datetime.now(UTC)
@@ -127,9 +138,9 @@ async def execute_task_handler(ctx, task_id: str) -> dict:
             await session.commit()
 
         # If retries available, retry with exponential backoff
-        if task_db.retry_count < task_db.max_retries:
+        if should_retry:
             # Exponential backoff: 2^retry_count seconds
-            backoff_seconds = 2 ** task_db.retry_count
+            backoff_seconds = 2 ** retry_count
             raise Retry(defer=backoff_seconds) from e
 
         return {
@@ -154,9 +165,16 @@ async def _execute_task_logic(task: Task) -> dict:
 
     **Returns:**
     - dict with execution result
+
+    **Raises:**
+    - Exception if payload contains {"fail": True} for testing retry logic
     """
     # Placeholder: simulated task execution
     logger.debug(f"Executing task logic for {task.task_type}")
+
+    # Support test scenarios: simulate failure if payload indicates failure
+    if task.payload.get("fail") is True:
+        raise RuntimeError("Simulated task failure for testing retry logic")
 
     # Example: echo the payload back as result
     result = {
