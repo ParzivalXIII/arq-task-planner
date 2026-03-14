@@ -10,7 +10,6 @@ Tracks:
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from threading import RLock
-from typing import Optional
 
 
 @dataclass
@@ -52,7 +51,7 @@ class MetricsCollector:
             self.task_completions_total += 1
             self.active_tasks = max(0, self.active_tasks - 1)
 
-    def record_task_failure(self, task_type: Optional[str] = None) -> None:
+    def record_task_failure(self, task_type: str | None=None) -> None:
         """Record a task failure."""
         with self._lock:
             self.task_failures_total += 1
@@ -88,7 +87,7 @@ class MetricsCollector:
             if len(self.worker_durations_ms) > 1000:
                 self.worker_durations_ms = self.worker_durations_ms[-1000:]
 
-    def get_request_latency_percentile(self, percentile: int) -> Optional[float]:
+    def get_request_latency_percentile(self, percentile: int) -> float | None:
         """Get request latency at specified percentile (0-100)."""
         with self._lock:
             if not self.request_latencies_ms:
@@ -100,14 +99,14 @@ class MetricsCollector:
             index = min(index, len(sorted_latencies) - 1)
             return sorted_latencies[index]
 
-    def get_request_latency_mean(self) -> Optional[float]:
+    def get_request_latency_mean(self) -> float | None:
         """Get mean request latency."""
         with self._lock:
             if not self.request_latencies_ms:
                 return None
             return sum(self.request_latencies_ms) / len(self.request_latencies_ms)
 
-    def get_worker_duration_percentile(self, percentile: int) -> Optional[float]:
+    def get_worker_duration_percentile(self, percentile: int) -> float | None:
         """Get worker duration at specified percentile (0-100)."""
         with self._lock:
             if not self.worker_durations_ms:
@@ -119,14 +118,14 @@ class MetricsCollector:
             index = min(index, len(sorted_durations) - 1)
             return sorted_durations[index]
 
-    def get_worker_duration_mean(self) -> Optional[float]:
+    def get_worker_duration_mean(self) -> float | None:
         """Get mean worker duration."""
         with self._lock:
             if not self.worker_durations_ms:
                 return None
             return sum(self.worker_durations_ms) / len(self.worker_durations_ms)
 
-    def get_success_rate(self) -> Optional[float]:
+    def get_success_rate(self) -> float | None:
         """Get task success rate (0.0-1.0)."""
         with self._lock:
             total = self.task_completions_total + self.task_failures_total
@@ -182,15 +181,15 @@ class MetricsSnapshot:
     task_retries_total: int
     task_dead_letters_total: int
     active_tasks: int
-    request_latency_mean_ms: Optional[float]
-    request_latency_p50_ms: Optional[float]
-    request_latency_p95_ms: Optional[float]
-    request_latency_p99_ms: Optional[float]
-    worker_duration_mean_ms: Optional[float]
-    worker_duration_p50_ms: Optional[float]
-    worker_duration_p95_ms: Optional[float]
-    worker_duration_p99_ms: Optional[float]
-    success_rate: Optional[float]
+    request_latency_mean_ms: float | None
+    request_latency_p50_ms: float | None
+    request_latency_p95_ms: float | None
+    request_latency_p99_ms: float | None
+    worker_duration_mean_ms: float | None
+    worker_duration_p50_ms: float | None
+    worker_duration_p95_ms: float | None
+    worker_duration_p99_ms: float | None
+    success_rate: float | None
     failures_by_type: dict[str, int]
     started_at: datetime
 

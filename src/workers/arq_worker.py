@@ -1,5 +1,6 @@
 """ARQ worker configuration and initialization."""
 import logging
+import time
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -10,6 +11,7 @@ from src.core.config import settings
 from src.db.session import engine as default_engine
 from src.models.task import Task, TaskStatus
 from src.observability.logging import logger as structured_logger
+from src.observability.metrics import get_metrics_collector
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -65,8 +67,10 @@ async def execute_task_handler(ctx, task_id: str) -> dict:
     **Raises:**
     - Retry: if the handler fails and retries are available
     """
+    start_time = time.time()
     engine = ctx.get("engine", default_engine)
     task_id_str = str(task_id)
+    metrics = get_metrics_collector()
 
     try:
         # Fetch task
@@ -100,7 +104,11 @@ async def execute_task_handler(ctx, task_id: str) -> dict:
             session.add(task_db)
             await session.commit()
 
-        logger.info(f"✅ Task {task_id_str} completed successfully")
+        elapsed_ms = (time.time() - start_time) * 1000
+        metrics.record_worker_duration(elapsed_ms)
+        metrics.record_task_completion()
+
+        logger.info(f"✅ Task {task_id_str} completed successfully in {elapsed_ms:.2f}ms")
         return {"status": "completed", "result": result}
 
     except Exception as e:
@@ -136,6 +144,14 @@ async def execute_task_handler(ctx, task_id: str) -> dict:
             task_db.updated_at = datetime.now(UTC)
             session.add(task_db)
             await session.commit()
+
+        # Record metrics for failure/dead-letter/retry
+        if should_retry:
+            metrics.record_task_retry()
+        else:
+            # Task is going to DEAD_LETTER - record as failure
+            metrics.record_task_failure(task.task_type)
+            metrics.record_dead_letter()
 
         # If retries available, retry with exponential backoff
         if should_retry:

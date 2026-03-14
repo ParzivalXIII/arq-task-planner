@@ -10,8 +10,6 @@ Tests verify:
 import pytest
 
 from src.observability.metrics import (
-    MetricsCollector,
-    MetricsSnapshot,
     get_metrics_collector,
 )
 
@@ -327,7 +325,7 @@ class TestMetricsEndpoint:
         # Test the response format directly without TestClient
         snapshot = metrics_collector.get_snapshot()
         output = snapshot.to_prometheus_format()
-        
+
         assert isinstance(output, str)
         assert len(output) > 0
         assert "task_submissions_total" in output
@@ -408,7 +406,7 @@ class TestMetricsIntegration:
         metrics_collector.record_task_submission()
         metrics_collector.record_request_latency(13.0)
         metrics_collector.record_task_failure("email_task")
-        
+
         # Submit, retry, then complete
         metrics_collector.record_task_submission()
         metrics_collector.record_request_latency(11.0)

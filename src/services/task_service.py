@@ -14,6 +14,7 @@ from sqlmodel import select
 from src.core.config import settings
 from src.db.session import get_session
 from src.models.task import Task, TaskStatus
+from src.observability.metrics import get_metrics_collector
 
 # state machine definition from PRD
 _ALLOWED_TRANSITIONS = {
@@ -118,6 +119,10 @@ class TaskService:
 
         # publish event after commit
         await self.publish_event(task)
+        
+        # Record task submission for observability
+        get_metrics_collector().record_task_submission()
+        
         return task
 
     async def get_task(self, task_id: UUID) -> Task | None:
@@ -149,6 +154,10 @@ class TaskService:
             self.session.add(task)
             await self.session.commit()
             await self.session.refresh(task)
+            
+            # Record dead letter for observability
+            get_metrics_collector().record_dead_letter()
+            
             return task
 
         task.retry_count += 1
@@ -158,6 +167,9 @@ class TaskService:
         await self.session.commit()
         await self.session.refresh(task)
 
+        # Record task retry for observability
+        get_metrics_collector().record_task_retry()
+        
         await self.publish_event(task)
         return task
 
