@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import SQLModel
 
-from src.api.routes import health_router, tasks_router
+from src.api.routes import health_router, metrics_router, tasks_router
 from src.core.config import settings
 from src.observability.logging import logger
 
@@ -39,3 +39,4 @@ async def startup_event():
 # Register routers
 app.include_router(tasks_router)
 app.include_router(health_router)
+app.include_router(metrics_router)
