@@ -150,7 +150,7 @@ async def execute_task_handler(ctx, task_id: str) -> dict:
             metrics.record_task_retry()
         else:
             # Task is going to DEAD_LETTER - record as failure
-            metrics.record_task_failure(task.task_type)
+            metrics.record_task_failure(task.task_type)     # type: ignore
             metrics.record_dead_letter()
 
         # If retries available, retry with exponential backoff

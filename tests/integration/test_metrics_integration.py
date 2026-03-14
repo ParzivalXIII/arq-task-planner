@@ -8,9 +8,8 @@ and worker pipeline.
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlmodel import SQLModel
-from uuid import uuid4
 
-from src.models.task import Task, TaskStatus
+from src.models.task import TaskStatus
 from src.observability.metrics import get_metrics_collector
 from src.services.task_service import TaskService
 
@@ -60,17 +59,17 @@ async def test_metrics_recorded_on_task_creation(
 ):
     """Creating a task should increment submission counter."""
     service = TaskService(session=db_session)
-    
+
     # Verify initial state
     assert metrics_collector.task_submissions_total == 0
     assert metrics_collector.active_tasks == 0
-    
+
     # Create a task
     task = await service.create_task(
         task_type="test_task",
         payload={"data": "test"}
     )
-    
+
     # Verify metrics recorded
     assert metrics_collector.task_submissions_total == 1
     assert metrics_collector.active_tasks == 1
@@ -83,7 +82,7 @@ async def test_metrics_recorded_on_task_retry(
 ):
     """Retrying a task should increment retry counter."""
     service = TaskService(session=db_session)
-    
+
     # Create and fetch a task
     task = await service.create_task(
         task_type="test_task",
@@ -91,13 +90,13 @@ async def test_metrics_recorded_on_task_retry(
         max_retries=3
     )
     task_id = task.id
-    
+
     # Reset metrics after creation
     metrics_collector.reset()
-    
+
     # Retry the task
     retried_task = await service.retry_task(task_id)
-    
+
     # Verify metrics recorded
     assert metrics_collector.task_retries_total == 1
     assert retried_task.status == TaskStatus.RETRYING
@@ -110,7 +109,7 @@ async def test_metrics_dead_letter_on_max_retries(
 ):
     """Exceeding max retries should move task to DEAD_LETTER."""
     service = TaskService(session=db_session)
-    
+
     # Create a task with max_retries=1
     task = await service.create_task(
         task_type="test_task",
@@ -118,15 +117,15 @@ async def test_metrics_dead_letter_on_max_retries(
         max_retries=1
     )
     task_id = task.id
-    
+
     # Reset metrics
     metrics_collector.reset()
-    
+
     # First retry (should work)
     task = await service.retry_task(task_id)
     assert task.status == TaskStatus.RETRYING
     assert metrics_collector.task_retries_total == 1
-    
+
     # Second retry (should exceed max and go to DEAD_LETTER)
     task = await service.retry_task(task_id)
     assert task.status == TaskStatus.DEAD_LETTER
@@ -139,20 +138,20 @@ async def test_metrics_on_status_transition(
 ):
     """Task status transitions should be tracked by service."""
     service = TaskService(session=db_session)
-    
+
     # Create a task
     task = await service.create_task(
         task_type="test_task",
         payload={"data": "test"}
     )
-    
+
     # Reset to test status transitions
     metrics_collector.reset()
-    
+
     # Update to PROCESSING
     task = await service.update_status(task, TaskStatus.PROCESSING)
     assert task.status == TaskStatus.PROCESSING
-    
+
     # Update to COMPLETED
     task = await service.update_status(task, TaskStatus.COMPLETED)
     assert task.status == TaskStatus.COMPLETED
@@ -164,27 +163,27 @@ async def test_metrics_show_realistic_task_flow(
 ):
     """Full task lifecycle should show correct metrics snapshot."""
     service = TaskService(session=db_session)
-    
+
     # Create 3 tasks
     for i in range(3):
         await service.create_task(
             task_type="task_type_a" if i < 2 else "task_type_b",
             payload={"index": i}
         )
-    
+
     metrics = metrics_collector.get_snapshot()
-    
+
     # Should show 3 submissions and 3 active
     assert metrics.task_submissions_total == 3
     assert metrics.active_tasks == 3
-    
+
     # Get Prometheus format
     prometheus_text = metrics.to_prometheus_format()
     assert "task_submissions_total 3" in prometheus_text
     assert "active_tasks 3" in prometheus_text
 
 
-@pytest.mark.asyncio 
+@pytest.mark.asyncio
 async def test_metrics_collected_with_request_latency(
     db_session: AsyncSession, metrics_collector
 ):
@@ -193,12 +192,12 @@ async def test_metrics_collected_with_request_latency(
     metrics_collector.record_request_latency(10.5)
     metrics_collector.record_request_latency(20.5)
     metrics_collector.record_request_latency(30.5)
-    
+
     # Verify calculations
     mean = metrics_collector.get_request_latency_mean()
     p50 = metrics_collector.get_request_latency_percentile(50)
     p95 = metrics_collector.get_request_latency_percentile(95)
-    
+
     assert mean == 20.5
     assert p50 == 20.5
     assert p95 == 30.5
@@ -210,26 +209,26 @@ async def test_metrics_success_rate_calculation(
 ):
     """Success rate should accurately reflect completions vs failures."""
     service = TaskService(session=db_session)
-    
+
     # Create a task
-    task = await service.create_task(
+    task = await service.create_task(           # type: ignore  # noqa: F841
         task_type="test",
         payload={}
     )
-    
+
     # Record as completion
     metrics_collector.record_task_completion()
-    
+
     # Create 2 more and record as failures
     for _ in range(2):
         await service.create_task(task_type="test", payload={})
     metrics_collector.record_task_failure("test")
     metrics_collector.record_task_failure("test")
-    
+
     # Success rate should be 1 completed / 3 total = 0.333...
     rate = metrics_collector.get_success_rate()
     assert rate == pytest.approx(0.333, rel=0.01)
-    
+
     # Snapshot should include rate
     snapshot = metrics_collector.get_snapshot()
     assert snapshot.success_rate == pytest.approx(0.333, rel=0.01)
