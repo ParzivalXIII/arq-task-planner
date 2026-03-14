@@ -18,7 +18,7 @@ env/
 # Jupyter/IPython
 .ipynb_checkpoints/
 
-# Test, coverage, and profiling
+# Test, coverage, and profiling & databases
 .coverage
 .coverage.*
 .cache/
@@ -26,6 +26,9 @@ htmlcov/
 *.cover
 *.py,cover
 *.log
+*db
+*.sqlite
+*.sqlite3
 coverage.xml
 nosetests.xml
 test-results/
